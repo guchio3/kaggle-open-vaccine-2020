@@ -1,0 +1,12 @@
+.nvimlog
+tags
+*__pycache__*
+
+logs/*
+inputs/*/*
+submissions/*
+notebooks/.ipynb_checkpoints/
+
+!.gitkeep
+!inputs/origin/.gitkeep
+!inputs/nes_info/.gitkeep
