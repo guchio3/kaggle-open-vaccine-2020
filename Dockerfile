@@ -24,6 +24,7 @@ RUN conda install -y -c conda-forge pudb
 
 # install pip packages
 #RUN pip install nlpaug torchcontrib
+RUN pip install japanize_matplotlib
 
 # set jupyter notebook
 # jupyter vim key-bind settings

@@ -34,4 +34,4 @@ services:
             - LD_LIBRARY_PATH=/usr/local/cuda/lib64
         ports:
             - 8888:8888
-        command: jupyter notebook --port 8888 --ip=0.0.0.0 --allow-root
+        command: jupyter notebook --port 8888 --ip=0.0.0.0 --allow-root /root/workspace/notebooks
