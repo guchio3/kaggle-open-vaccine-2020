@@ -37,7 +37,7 @@ class OpenVaccineDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.loc[idx]
 
-        if row['input_ids'] is None:
+        if row['encoded_sequence'] is None:
             row = self._prep(row)
             self.df.loc[idx, 'encoded_sequence'] = row['encoded_sequence']
             self.df.loc[idx, 'encoded_structure'] = row['encoded_structure']

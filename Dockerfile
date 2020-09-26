@@ -1,5 +1,6 @@
-FROM gcr.io/kaggle-images/python:latest
-#FROM kaggle/python-gpu-build:latest
+#FROM gcr.io/kaggle-images/python:latest
+# FROM kaggle/python-gpu-build:latest
+FROM gcr.io/kaggle-gpu-images/python
 
 # set env
 ENV LC_ALL "en_US.UTF-8"

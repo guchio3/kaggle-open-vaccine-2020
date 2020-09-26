@@ -1,13 +1,11 @@
 description: "default config"
-runner: r000
+runner: r001
 SINGLE_FOLD: true
 split:
-    split_type: skf
+    split_type: kf
     split_num: 5
     shuffle: true
     random_state: 71
-    grp_key: id
-    # abhishek8: ./inputs/datasets/abhishek_folds/train_8folds.csv
 loader:
     trn_sampler_type: random
     trn_batch_size: 32

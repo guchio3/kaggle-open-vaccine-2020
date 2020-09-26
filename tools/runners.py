@@ -28,7 +28,7 @@ random.seed(71)
 torch.manual_seed(71)
 
 
-class Runner(object):
+class r001BaseRunner(object):
     def __init__(self, exp_id, checkpoint, device,
                  debug, config, default_config):
         # set logger
@@ -57,7 +57,7 @@ class Runner(object):
         self.cfg_SINGLE_FOLD = config['SINGLE_FOLD']
         self.cfg_split = config['split']
         self.cfg_loader = config['loader']
-        self.cfg_dataset = config['dataset']
+        # self.cfg_dataset = config['dataset']
         self.cfg_fobj = config['fobj']
         self.cfg_model = config['model']
         self.cfg_optimizer = config['optimizer']
@@ -85,13 +85,14 @@ class Runner(object):
         trn_start_time = time.time()
         # load and preprocess train.csv
         trn_df = pd.read_json('./inputs/origin/train.json', lines=True)
+        trn_df['reactivity_mean'] = trn_df['reactivity'].apply(lambda x: np.mean(x))
 
         # split data
         splitter = mySplitter(**self.cfg_split, logger=self.logger)
         fold = splitter.split(
-            trn_df['id'],
-            trn_df[trn_df.columns],
-            group=self.cfg_split['grp_key']
+            trn_df,
+            trn_df['reactivity_mean'],
+            group=trn_df['id']
         )
 
         # load and apply checkpoint if needed
@@ -369,17 +370,18 @@ class Runner(object):
 
     def _get_fobj(self, fobj_type):
         if fobj_type == 'mcrmse':
-            fobj = MCRMSE()
+            fobj = MCRMSE
         else:
             raise Exception(f'invalid fobj_type: {fobj_type}')
         return fobj
 
-    def _get_model(self, model_type, num_output_units,
-                   pretrained_model_name_or_path):
+    def _get_model(self, model_type):
         if model_type == 'guchio_gru_1':
             model = guchioGRU1(
-                num_output_units,
-                pretrained_model_name_or_path
+                seq_len=107, pred_len=68,
+                layer_num=3, dropout=0.5,
+                num_embeddings=14, embed_dim=128,
+                hidden_dim=128, hidden_layers=3, out_dim=3
             )
         else:
             raise Exception(f'invalid model_type: {model_type}')
@@ -458,8 +460,8 @@ class Runner(object):
         if dataset_type == 'open_vaccine_dataset':
             dataset = OpenVaccineDataset(mode=mode, df=df,
                                          logger=self.logger,
-                                         debug=self.debug,
-                                         **self.cfg_dataset)
+                                         debug=self.debug,)
+            #                             **self.cfg_dataset)
         else:
             raise NotImplementedError()
 
