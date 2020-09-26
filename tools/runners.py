@@ -1,31 +1,28 @@
 import copy
 import datetime
-import itertools
-import os
 import gc
+import os
 import random
-import re
 import time
 from glob import glob
 from itertools import chain
 
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
-
 import torch
 import torch.optim as optim
+# from transformers import RobertaForMaskedLM
+from torch.nn import MSELoss
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import RandomSampler, SequentialSampler
+from tqdm.auto import tqdm
+
 from tools.datasets import OpenVaccineDataset
 from tools.loggers import myLogger
-# from tools.metrics import 
+from tools.metrics import MCRMSE
 from tools.models import EMA, guchioGRU1
 from tools.schedulers import pass_scheduler
 from tools.splitters import mySplitter
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import (RandomSampler, SequentialSampler,
-                                      WeightedRandomSampler)
-# from transformers import RobertaForMaskedLM
-from torch.nn import MSELoss
 
 random.seed(71)
 torch.manual_seed(71)
@@ -94,7 +91,7 @@ class Runner(object):
         fold = splitter.split(
             trn_df['id'],
             trn_df[trn_df.columns],
-            group=trn_df['sentiment']
+            group=self.cfg_split['grp_key']
         )
 
         # load and apply checkpoint if needed
@@ -125,10 +122,10 @@ class Runner(object):
             # build loader
             fold_trn_df = trn_df.iloc[trn_idx]
 
-            if self.cfg_train['pseudo']:
-                fold_trn_df = pd.concat([fold_trn_df,
-                                         pd.read_csv(self.cfg_train['pseudo'][fold_num])],
-                                        axis=0).reset_index(drop=True)
+            # if self.cfg_train['pseudo']:
+            #     fold_trn_df = pd.concat([fold_trn_df,
+            #                              pd.read_csv(self.cfg_train['pseudo'][fold_num])],
+            #                             axis=0).reset_index(drop=True)
 
             trn_loader = self._build_loader(mode='train', df=fold_trn_df,
                                             **self.cfg_loader)
@@ -159,7 +156,7 @@ class Runner(object):
                 iter_epochs = range(0, self.cfg_train['max_epoch'], 1)
 
             epoch_start_time = time.time()
-            epoch_best_jaccard = -1
+            epoch_best_score = np.inf
             self.logger.info('start trainging !')
             for current_epoch in iter_epochs:
                 if self.checkpoint and current_epoch <= checkpoint_epoch:
@@ -193,22 +190,17 @@ class Runner(object):
                 else:
                     raise NotImplementedError('accum_mod')
 
-                trn_loss = self._train_loop(
-                    model, optimizer, fobj, trn_loader, warmup_batch,
-                    ema, accum_mod,
-                    self.cfg_train['loss_weight_type'],
-                    self.cfg_train['use_dist_loss'],
-                    self.cfg_train['single_word'])
+                trn_loss = self._train_loop(model, optimizer, fobj,
+                                            trn_loader, warmup_batch,
+                                            ema, accum_mod)
                 ema.on_epoch_end(model)
                 if self.cfg_train['ema_n'] > 0:
                     ema.set_weights(ema_model)  # NOTE: model?
                 else:
                     ema_model = model
                 val_loss, val_ids, val_preds, val_labels = \
-                    self._valid_loop(ema_model, fobj, val_loader,
-                                     self.cfg_train['loss_weight_type'],
-                                     self.cfg_predict['single_word'])
-                epoch_best_score = max(epoch_best_score, val_loss)
+                    self._valid_loop(ema_model, fobj, val_loader)
+                epoch_best_score = min(epoch_best_score, val_loss)
 
                 self.logger.info(
                     f'epoch: {current_epoch} / '
@@ -248,31 +240,136 @@ class Runner(object):
             fold_time = int(time.time() - epoch_start_time) // 60
             line_message = f'{self.exp_id}: {self.description} \n' \
                 f'fini fold {fold_num} in {fold_time} min. \n' \
-                f'epoch best jaccard: {epoch_best_jaccard}'
+                f'epoch best score: {epoch_best_score}'
             self.logger.send_line_notification(line_message)
 
             if self.cfg_SINGLE_FOLD:
+                self.logger.info('stop training at the end of the first fold!')
                 break
 
-        fold_best_jacs = []
-        for fold_num in range(self.cfg_split['split_num']):
-            fold_best_jacs.append(max(self.histories[fold_num]['val_jac']))
-        jac_mean = np.mean(fold_best_jacs)
-        jac_std = np.std(fold_best_jacs)
+        fold_best_losses = []
+        if self.cfg_SINGLE_FOLD:
+            loss_mean = min(self.histories[0]['val_loss'])
+            loss_std = 0.
+            fold_best_losses = [loss_mean, ]
+        else:
+            for fold_num in range(self.cfg_split['split_num']):
+                fold_best_losses.append(min(self.histories[fold_num]['val_loss']))
+            loss_mean = np.mean(fold_best_losses)
+            loss_std = np.std(fold_best_losses)
 
         trn_time = int(time.time() - trn_start_time) // 60
         line_message = \
             f'----------------------- \n' \
             f'{self.exp_id}: {self.description} \n' \
-            f'jaccard      : {jac_mean:.5f}+-{jac_std:.5f} \n' \
-            f'best_jacs    : {fold_best_jacs} \n' \
+            f'loss      : {loss_mean:.5f}+-{loss_std:.5f} \n' \
+            f'best_losses    : {fold_best_losses} \n' \
             f'time         : {trn_time} min \n' \
             f'-----------------------'
         self.logger.send_line_notification(line_message)
 
+    def _train_loop(self, model, optimizer, fobj,
+                    loader, warmup_batch, ema, accum_mod):
+        model.train()
+        running_loss = 0
+
+        for batch_i, batch in enumerate(tqdm(loader)):
+            if warmup_batch > 0:
+                self._warmup(batch_i, warmup_batch, model)
+
+            # ids = batch['ids'].to(self.device)
+            encoded_sequence = batch['encoded_sequence'].to(self.device)
+            encoded_structure = batch['encoded_structure'].to(self.device)
+            encoded_predicted_loop_type = batch['encoded_predicted_loop_type']\
+                .to(self.device)
+            # reactivity_error = batch['reactivity_error'].to(self.device)
+            # deg_error_Mg_pH10 = batch['deg_error_Mg_pH10'].to(self.device)
+            # deg_error_pH10 = batch['deg_error_pH10'].to(self.device)
+            # deg_error_Mg_50C = batch['deg_error_Mg_50C'].to(self.device)
+            # deg_error_50C = batch['deg_error_50C'].to(self.device)
+            reactivity = batch['reactivity'].to(self.device)
+            deg_Mg_pH10 = batch['deg_Mg_pH10'].to(self.device)
+            # deg_pH10 = batch['deg_pH10'].to(self.device)
+            deg_Mg_50C = batch['deg_Mg_50C'].to(self.device)
+            # deg_50C = batch['deg_50C'].to(self.device)
+
+            labels = torch.transpose(
+                torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
+            #    torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C, deg_50C]), 0, 1)
+
+            logits = model(encoded_sequence,
+                           encoded_structure,
+                           encoded_predicted_loop_type)
+
+            train_loss = fobj(logits, labels)
+
+            train_loss.backward()
+
+            running_loss += train_loss.item()
+
+            if (batch_i + 1) % accum_mod == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
+                ema.on_batch_end(model)
+
+        train_loss = running_loss / len(loader)
+
+        return train_loss
+
+    def _valid_loop(self, model, fobj, loader):
+        model.eval()
+        running_loss = 0
+
+        with torch.no_grad():
+            valid_ids = []
+            valid_preds = []
+            valid_labels = []
+
+            for batch in tqdm(loader):
+                ids = batch['ids'].to(self.device)
+                encoded_sequence = batch['encoded_sequence'].to(self.device)
+                encoded_structure = batch['encoded_structure'].to(self.device)
+                encoded_predicted_loop_type = \
+                    batch['encoded_predicted_loop_type'].to(self.device)
+                # reactivity_error = batch['reactivity_error'].to(self.device)
+                # deg_error_Mg_pH10 = batch['deg_error_Mg_pH10'].to(self.device)
+                # deg_error_pH10 = batch['deg_error_pH10'].to(self.device)
+                # deg_error_Mg_50C = batch['deg_error_Mg_50C'].to(self.device)
+                # deg_error_50C = batch['deg_error_50C'].to(self.device)
+                reactivity = batch['reactivity'].to(self.device)
+                deg_Mg_pH10 = batch['deg_Mg_pH10'].to(self.device)
+                # deg_pH10 = batch['deg_pH10'].to(self.device)
+                deg_Mg_50C = batch['deg_Mg_50C'].to(self.device)
+                # deg_50C = batch['deg_50C'].to(self.device)
+
+                labels = torch.transpose(
+                    torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
+                #    torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C, deg_50C]), 0, 1)
+
+                logits = model(encoded_sequence,
+                               encoded_structure,
+                               encoded_predicted_loop_type)
+
+                valid_loss = fobj(logits, labels)
+
+                running_loss += valid_loss.item()
+
+                valid_ids.append(ids.cpu())
+                valid_preds.append(logits)
+                valid_labels.append(labels)
+
+            valid_loss = running_loss / len(loader)
+
+            valid_ids = list(chain.from_iterable(valid_ids))
+            valid_preds = list(chain.from_iterable(valid_preds))
+            valid_labels = list(chain.from_iterable(valid_labels))
+
+        return valid_loss, valid_ids, valid_preds, valid_labels
+
     def _get_fobj(self, fobj_type):
-        if fobj_type == 'mse':
-            fobj = MSELoss()
+        if fobj_type == 'mcrmse':
+            fobj = MCRMSE()
         else:
             raise Exception(f'invalid fobj_type: {fobj_type}')
         return fobj
@@ -390,7 +487,7 @@ class Runner(object):
         module = model if self.device == 'cpu' else model.module
         if current_epoch == 0:
             for name, child in module.named_children():
-                if 'classifier' in name:
+                if 'WU' in name:
                     self.logger.info(name + ' is unfrozen')
                     for param in child.parameters():
                         param.requires_grad = True
@@ -431,14 +528,20 @@ class Runner(object):
         torch.save(cp_dict, cp_filename)
 
     def _search_best_filename(self, fold_num):
+        self.logger.info('Now searching the best filename...')
         best_loss = np.inf
         best_filename = ''
         for filename in glob(f'./checkpoints/{self.exp_id}/{fold_num}/*'):
             split_filename = filename.split('/')[-1].split('_')
-            temp_loss = float(split_filename[2])
+            temp_loss = float(split_filename[4])
             if temp_loss < best_loss:
                 best_filename = filename
                 best_loss = temp_loss
+        if best_filename == '':
+            raise Exception("Could't find the best filename.")
+        else:
+            self.logger.info(f'Hit! the best filename is {best_filename}')
+            self.logger.info(f'     the best loss is {best_loss}')
         return best_filename
 
     def _load_best_checkpoint(self, fold_num):

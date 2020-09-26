@@ -6,29 +6,20 @@ split:
     split_num: 5
     shuffle: true
     random_state: 71
+    grp_key: id
     # abhishek8: ./inputs/datasets/abhishek_folds/train_8folds.csv
 loader:
     trn_sampler_type: random
-    trn_batch_size: 96
+    trn_batch_size: 32
     tst_sampler_type: sequential
-    tst_batch_size: 96
-    dataset_type: tse_headtail_dataset
-dataset:
-    tokenizer_type: roberta_bytelevel_bpe
-    pretrained_model_name_or_path: ./inputs/datasets/
-    do_lower_case: true
-    add_pair_prefix_space: false
-    max_length: 125
-    tokenize_period: false
-    tail_index: natural
-    use_magic: false
-    tkm_annot: false
+    tst_batch_size: 32
+    dataset_type: open_vaccine_dataset
+    # dataset:
+    #     tokenizer_type: open_vaccine_dataset
 model:
-    model_type: roberta-headtail
-    pretrained_model_name_or_path: roberta-base
-    num_output_units: 125
+    model_type: guchio_gru_1
 fobj:
-    fobj_type: ce
+    fobj_type: mcrmse
 optimizer:
     optim_type: adam
     lr: 0.00003
@@ -41,9 +32,8 @@ scheduler:
         - 3
     multistep_gamma: 0.2
 train:
-    max_epoch: 5
-    warmup_epoch: 1
-    thresh_unit: 0.05  # no meaning for head tail
+    max_epoch: 50
+    warmup_epoch: 0
     warmup_batch: 0
     ema_mu: 0.9
     ema_level: batch
@@ -52,5 +42,3 @@ train:
     loss_weight_type: nothing
     pseudo: false
 predict:
-    pospro:
-        keep: none

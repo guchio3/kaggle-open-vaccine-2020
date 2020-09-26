@@ -21,8 +21,7 @@ class myLogger:
 
     def send_line_notification(self, message):
         self.logger.info(message)
-
-        line_token = 'KNIHolg8xpJEJeILNWVp8EN2l2iu7McmC7ViE1CjRON'
+        line_token = 'IBlg78go7s0iR5J0k9V6TMiIffvhgIGQuTqbQBKXQeU'
         endpoint = 'https://notify-api.line.me/api/notify'
         message = "\n{}".format(message)
         payload = {'message': message}

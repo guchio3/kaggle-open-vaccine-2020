@@ -14,16 +14,22 @@ class OpenVaccineDataset(Dataset):
         self.df['encoded_sequence'] = None
         self.df['encoded_structure'] = None
         self.df['encoded_predicted_loop_type'] = None
-        self.df['reactivity_error'] = None
-        self.df['deg_error_Mg_pH10'] = None
-        self.df['deg_error_pH10'] = None
-        self.df['deg_error_Mg_50C'] = None
-        self.df['deg_error_50C'] = None
-        self.df['reactivity'] = None
-        self.df['deg_Mg_pH10'] = None
-        self.df['deg_pH10'] = None
-        self.df['deg_Mg_50C'] = None
-        self.df['deg_50C'] = None
+
+        LABEL_COLS = [
+            'reactivity_error',
+            'deg_error_Mg_pH10',
+            'deg_error_pH10',
+            'deg_error_Mg_50C',
+            'deg_error_50C',
+            'reactivity',
+            'deg_Mg_pH10',
+            'deg_pH10',
+            'deg_Mg_50C',
+            'deg_50C',
+        ]
+        for label_col in LABEL_COLS:
+            if label_col not in self.df.columns:
+                self.df[label_col] = None
 
     def __len__(self):
         return len(self.df)
@@ -43,6 +49,11 @@ class OpenVaccineDataset(Dataset):
             'encoded_sequence': torch.tensor(row['encoded_sequence']),
             'encoded_structure': torch.tensor(row['encoded_structure']),
             'encoded_predicted_loop_type': torch.tensor(row['encoded_predicted_loop_type']),
+            'reactivity': torch.tensor(row['reactivity']),
+            'deg_Mg_pH10': torch.tensor(row['deg_Mg_pH10']),
+            'deg_pH10': torch.tensor(row['deg_pH10']),
+            'deg_Mg_50C': torch.tensor(row['deg_Mg_50C']),
+            'deg_50C': torch.tensor(row['deg_50C']),
         }
 
     def _prep(self, row):
