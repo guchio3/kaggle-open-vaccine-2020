@@ -433,6 +433,41 @@ class r001BaseRunner(object):
 
         return valid_loss, valid_ids, valid_preds, valid_labels
 
+    def _test_loop(self, model, loader, seq_len):
+        model.eval()
+
+        with torch.no_grad():
+            test_ids = []
+            test_preds = []
+
+            for batch in tqdm(loader):
+                id = batch['id']
+                encoded_sequence = batch['encoded_sequence'].to(self.device)
+                encoded_structure = batch['encoded_structure'].to(self.device)
+                encoded_predicted_loop_type = \
+                    batch['encoded_predicted_loop_type'].to(self.device)
+
+                logits = model(encoded_sequence,
+                               encoded_structure,
+                               encoded_predicted_loop_type)
+                logits = logits[:, :seq_len, :]
+
+                test_ids.append(id)
+                test_preds.append(logits)
+
+            test_ids = list(chain.from_iterable(test_ids))
+            test_preds = list(chain.from_iterable(test_preds))
+
+        return test_ids, test_preds
+
+    def _explode_preds(self, test_ids, test_preds):
+        exploded_test_ids, exploded_test_preds = [], []
+        for test_id, test_pred in test_ids, test_preds:
+            for i, test_pred_i in enumerate(test_pred):
+                exploded_test_ids.append(f'{test_id}_{i}')
+                exploded_test_preds.append(test_pred_i)
+        return exploded_test_ids, exploded_test_preds
+
     def _get_fobj(self, fobj_type):
         if fobj_type == 'mcrmse':
             fobj = MCRMSE

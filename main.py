@@ -38,3 +38,4 @@ if __name__ == '__main__':
         raise NotImplementedError(f'{config["runner"]} is not implemented.')
     runner = Runner(exp_id, checkpoint, device, debug, config, default_config)
     runner.train()
+    runner.predict()
