@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 
+import warnings
+
 
 class OpenVaccineDataset(Dataset):
     def __init__(self, mode, df, logger=None, debug=False):
@@ -37,12 +39,14 @@ class OpenVaccineDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.loc[idx]
 
-        if row['encoded_sequence'] is None:
-            row = self._prep(row)
-            self.df.loc[idx, 'encoded_sequence'] = row['encoded_sequence']
-            self.df.loc[idx, 'encoded_structure'] = row['encoded_structure']
-            self.df.loc[idx, 'encoded_predicted_loop_type'] \
-                = row['encoded_predicted_loop_type']
+        # if row['encoded_sequence'] is None:
+        #     row = self._prep(row)
+        #     self.df.loc[idx, 'encoded_sequence'] = row['encoded_sequence']
+        #     self.df.loc[idx, 'encoded_structure'] = row['encoded_structure']
+        #     self.df.loc[idx, 'encoded_predicted_loop_type'] \
+        #         = row['encoded_predicted_loop_type']
+
+        row = self._prep(row)
 
         return {
             'id': row['id'],
@@ -57,6 +61,9 @@ class OpenVaccineDataset(Dataset):
         }
 
     def _prep(self, row):
+        # warnings.simplefilter('ignore', SettingWithCopyWarning)
+        warnings.simplefilter('ignore')
+
         row['encoded_sequence'] = [self.token2int[s] for s in row['sequence']]
         row['encoded_structure'] \
             = [self.token2int[s] for s in row['structure']]

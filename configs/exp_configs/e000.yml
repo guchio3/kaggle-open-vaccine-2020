@@ -16,11 +16,18 @@ loader:
     #     tokenizer_type: open_vaccine_dataset
 model:
     model_type: guchio_gru_1
+    # seq_len: 107
+    # pred_len: 68
+    num_layers: 3
+    dropout: 0.5
+    num_embeddings: 14
+    embed_dim: 64
+    out_dim: 3
 fobj:
     fobj_type: mcrmse
 optimizer:
     optim_type: adam
-    lr: 0.00003
+    lr: 0.0003
 scheduler:
     scheduler_type: cosine
     every_step_unit: 0.2

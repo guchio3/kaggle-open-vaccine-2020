@@ -5,6 +5,7 @@ tags
 logs/*
 inputs/*/*
 submissions/*
+checkpoints/*
 notebooks/.ipynb_checkpoints/
 
 !.gitkeep

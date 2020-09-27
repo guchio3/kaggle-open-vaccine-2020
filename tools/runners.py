@@ -9,20 +9,20 @@ from itertools import chain
 
 import numpy as np
 import pandas as pd
-import torch
-import torch.optim as optim
-# from transformers import RobertaForMaskedLM
-from torch.nn import MSELoss
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from tqdm.auto import tqdm
 
+import torch
+import torch.optim as optim
 from tools.datasets import OpenVaccineDataset
 from tools.loggers import myLogger
 from tools.metrics import MCRMSE
 from tools.models import EMA, guchioGRU1
 from tools.schedulers import pass_scheduler
 from tools.splitters import mySplitter
+# from transformers import RobertaForMaskedLM
+from torch.nn import MSELoss
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 random.seed(71)
 torch.manual_seed(71)
@@ -85,7 +85,8 @@ class r001BaseRunner(object):
         trn_start_time = time.time()
         # load and preprocess train.csv
         trn_df = pd.read_json('./inputs/origin/train.json', lines=True)
-        trn_df['reactivity_mean'] = trn_df['reactivity'].apply(lambda x: np.mean(x))
+        trn_df['reactivity_mean'] = trn_df['reactivity'].apply(
+            lambda x: np.mean(x))
 
         # split data
         splitter = mySplitter(**self.cfg_split, logger=self.logger)
@@ -226,7 +227,7 @@ class r001BaseRunner(object):
 
                 self._save_checkpoint(fold_num, current_epoch,
                                       ema_model, optimizer, scheduler,
-                                      val_preds, val_labels, val_loss)
+                                      val_ids, val_preds, val_labels, val_loss)
 
             best_filename = self._search_best_filename(fold_num)
             if not os.path.exists(f'./checkpoints/{self.exp_id}/best'):
@@ -255,7 +256,8 @@ class r001BaseRunner(object):
             fold_best_losses = [loss_mean, ]
         else:
             for fold_num in range(self.cfg_split['split_num']):
-                fold_best_losses.append(min(self.histories[fold_num]['val_loss']))
+                fold_best_losses.append(
+                    min(self.histories[fold_num]['val_loss']))
             loss_mean = np.mean(fold_best_losses)
             loss_std = np.std(fold_best_losses)
 
@@ -268,6 +270,62 @@ class r001BaseRunner(object):
             f'time         : {trn_time} min \n' \
             f'-----------------------'
         self.logger.send_line_notification(line_message)
+
+    def predict(self):
+        # load and preprocess train.csv
+        tst_df = pd.read_json('./inputs/origin/test.json', lines=True)
+        pub_tst_df = tst_df.query('seq_scored == 68')
+        pri_tst_df = tst_df.query('seq_scored == 91')
+
+        pub_tst_loader = self._build_loader(mode='test', df=pub_tst_df,
+                                            **self.cfg_loader)
+        pri_tst_loader = self._build_loader(mode='test', df=pri_tst_df,
+                                            **self.cfg_loader)
+        # build model and related objects
+        # these objects have state
+        model = self._get_model(**self.cfg_model)
+
+        ckpt_filenames = glob(f'./checkpoints/{self.exp_id}/best/*')
+
+        tst_sub_ids_list = []
+        tst_sub_preds_list = []
+        for ckpt_filename in ckpt_filenames:
+            checkpoint = torch.load(ckpt_filename)
+            model.load_state_dict(checkpoint['model_state_dict'])
+
+            # send to device
+            model = model.to(self.device)
+
+            pub_tst_ids, pub_tst_preds = self._test_loop(
+                model, pub_tst_loader, seq_len=68)
+            pri_tst_ids, pri_tst_preds = self._test_loop(
+                model, pri_tst_loader, seq_len=91)
+
+            pub_tst_sub_ids, pub_tst_sub_preds = self._explode_preds(
+                pub_tst_ids, pub_tst_preds)
+            pri_tst_sub_ids, pri_tst_sub_preds = self._explode_preds(
+                pri_tst_ids, pri_tst_preds)
+
+            tst_sub_ids = np.concatenate(
+                [pub_tst_sub_ids, pri_tst_sub_ids], axis=0)
+            tst_sub_preds = np.concatenate(
+                [pub_tst_sub_preds, pri_tst_sub_preds], axis=0)
+
+            tst_sub_ids_list.append(tst_sub_ids)
+            tst_sub_preds_list.append(tst_sub_preds)
+
+        res_tst_sub_ids = tst_sub_ids_list[0]
+        res_tst_sub_preds = np.mean(tst_sub_preds_list, axix=0)
+
+        sub_df = pd.DataFrame()
+        sub_df['id_seqpos'] = res_tst_sub_ids
+        sub_df['reactivity'] = res_tst_sub_preds[0]
+        sub_df['deg_Mg_pH10'] = res_tst_sub_preds[1]
+        sub_df['deg_Mg_50C'] = res_tst_sub_preds[2]
+        sub_df['deg_pH10'] = 0.
+        sub_df['deg_50C'] = 0.
+
+        sub_df.to_csv(f'./submissions/{self.exp_id}_sub.csv', index=False)
 
     def _train_loop(self, model, optimizer, fobj,
                     loader, warmup_batch, ema, accum_mod):
@@ -294,13 +352,16 @@ class r001BaseRunner(object):
             deg_Mg_50C = batch['deg_Mg_50C'].to(self.device)
             # deg_50C = batch['deg_50C'].to(self.device)
 
-            labels = torch.transpose(
-                torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
-            #    torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C, deg_50C]), 0, 1)
+            labels = torch.stack([reactivity, deg_Mg_pH10, deg_Mg_50C], dim=-1)
+            # labels = torch.transpose(
+            #     torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
+            # torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C,
+            # deg_50C]), 0, 1)
 
             logits = model(encoded_sequence,
                            encoded_structure,
                            encoded_predicted_loop_type)
+            logits = logits[:, :68, :]
 
             train_loss = fobj(logits, labels)
 
@@ -328,7 +389,7 @@ class r001BaseRunner(object):
             valid_labels = []
 
             for batch in tqdm(loader):
-                ids = batch['ids'].to(self.device)
+                id = batch['id']
                 encoded_sequence = batch['encoded_sequence'].to(self.device)
                 encoded_structure = batch['encoded_structure'].to(self.device)
                 encoded_predicted_loop_type = \
@@ -344,19 +405,23 @@ class r001BaseRunner(object):
                 deg_Mg_50C = batch['deg_Mg_50C'].to(self.device)
                 # deg_50C = batch['deg_50C'].to(self.device)
 
-                labels = torch.transpose(
-                    torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
-                #    torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C, deg_50C]), 0, 1)
+                labels = torch.stack(
+                    [reactivity, deg_Mg_pH10, deg_Mg_50C], dim=-1)
+                # labels = torch.transpose(
+                #     torch.cat([reactivity, deg_Mg_pH10, deg_Mg_50C]), 0, 1)
+                # torch.cat([reactivity, deg_Mg_pH10, deg_pH10, deg_Mg_50C,
+                # deg_50C]), 0, 1)
 
                 logits = model(encoded_sequence,
                                encoded_structure,
                                encoded_predicted_loop_type)
+                logits = logits[:, :68, :]
 
                 valid_loss = fobj(logits, labels)
 
                 running_loss += valid_loss.item()
 
-                valid_ids.append(ids.cpu())
+                valid_ids.append(id)
                 valid_preds.append(logits)
                 valid_labels.append(labels)
 
@@ -375,13 +440,13 @@ class r001BaseRunner(object):
             raise Exception(f'invalid fobj_type: {fobj_type}')
         return fobj
 
-    def _get_model(self, model_type):
+    def _get_model(self, model_type, num_layers, dropout,
+                   num_embeddings, embed_dim, out_dim):
         if model_type == 'guchio_gru_1':
             model = guchioGRU1(
-                seq_len=107, pred_len=68,
-                layer_num=3, dropout=0.5,
-                num_embeddings=14, embed_dim=128,
-                hidden_dim=128, hidden_layers=3, out_dim=3
+                num_layers=num_layers, dropout=dropout,
+                num_embeddings=num_embeddings, embed_dim=embed_dim,
+                out_dim=out_dim
             )
         else:
             raise Exception(f'invalid model_type: {model_type}')

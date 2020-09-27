@@ -39,40 +39,45 @@ class EMA(object):
 
 
 class guchioGRU1(nn.Module):
-    def __init__(self, seq_len=107, pred_len=68,
-                 layer_num=3, dropout=0.5,
-                 num_embeddings=14, embed_dim=128,
-                 hidden_dim=128, hidden_layers=3, out_dim=3):
+    def __init__(self,  # pred_len
+                 num_layers, dropout,
+                 num_embeddings, embed_dim,
+                 out_dim):
         super(guchioGRU1, self).__init__()
-        assert embed_dim == hidden_dim
-        self.pred_len = pred_len
-        self.embeding = nn.Embedding(
+        assert embed_dim % 2 == 0
+        hidden_dim = embed_dim * 3
+        # self.pred_len = pred_len
+        self.embedding = nn.Embedding(
             num_embeddings=num_embeddings,
             embedding_dim=embed_dim)
-        self.grus = []
-        for _ in range(layer_num):
-            self.grus.append(
-                nn.GRU(
-                    input_size=embed_dim * 3,
-                    hidden_size=hidden_dim,
-                    num_layers=hidden_layers,
-                    dropout=dropout,
-                    bidirectional=True,
-                    batch_first=True,
-                )
-            )
+        self.gru = nn.GRU(
+            input_size=hidden_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            dropout=dropout,
+            bidirectional=True,
+            batch_first=True,
+        )
         self.linear = nn.Linear(hidden_dim * 2, out_dim)
 
     def forward(self,
                 encoded_sequence,
                 encoded_structure,
                 encoded_predicted_loop_type):
-        seqs = torch.cat([encoded_sequence, encoded_structure,
-                          encoded_predicted_loop_type], dim=1)
-        embed = self.embeding(seqs)
-        output = embed
-        for gru in self.grus:
-            output, hidden = self.gru(output)
-        truncated = output[:, : self.pred_len, :]
-        out = self.linear(truncated)
+        embed_sequence = self.embedding(encoded_sequence)
+        embed_structure = self.embedding(encoded_structure)
+        embed_predicted_loop_type = self.embedding(encoded_predicted_loop_type)
+        # seqs = torch.cat([encoded_sequence, encoded_structure,
+        #                   encoded_predicted_loop_type], dim=1)
+        # seqs = torch.stack(
+        #     [encoded_sequence, encoded_structure, encoded_predicted_loop_type],
+        #     dim=1)
+        # embed = self.embedding(seqs)
+        # output = embed
+        embed = torch.cat([embed_sequence, embed_structure,
+                           embed_predicted_loop_type], dim=-1)
+        output, hidden = self.gru(embed)
+        out = self.linear(output)
+        # truncated = output[:, : self.pred_len, :]
+        # out = self.linear(truncated)
         return out
