@@ -119,11 +119,11 @@ class OpenVaccineDataset(Dataset):
         row['structure_dist'] = structure_dist
         row['structure_dist_stand'] \
             = ((np.asarray(structure_dist)
-                - 11.048005394870676) / 18.50391454966171).tolist()
+                - 0.09136617729066979) / 0.15104361845929062).tolist()
         row['structure_depth'] = structure_depth
         row['structure_depth_stand'] \
             = ((np.asarray(structure_depth)
-                - 5.784752215100881) / 6.936187530818166).tolist()
+                - 0.04789640838386961) / 0.05638407993041974).tolist()
         return row
 
     def _mk_structure_features(self, structure):
@@ -135,7 +135,7 @@ class OpenVaccineDataset(Dataset):
                 stack.append(i)
             elif s == ")":
                 j = stack.pop()
-                structure_dist[i] = i - j
-                structure_dist[j] = i - j
-            structure_depth.append(len(stack))
+                structure_dist[i] = (i - j) / len(structure)
+                structure_dist[j] = (i - j) / len(structure)
+            structure_depth.append(len(stack) / len(structure))
         return structure_dist, structure_depth
