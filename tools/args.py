@@ -18,6 +18,14 @@ def parse_args(logger=None):
                         help='experiment setting',
                         type=str,
                         required=True)
+    parser.add_argument('-t', '--train',
+                        help='settings for training',
+                        action='store_true',
+                        default=False)
+    parser.add_argument('-p', '--predict',
+                        help='settings for predict',
+                        action='store_true',
+                        default=False)
     parser.add_argument('-c', '--checkpoint',
                         help='the checkpoint u use',
                         type=str,

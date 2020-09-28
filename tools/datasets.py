@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -31,7 +32,7 @@ class OpenVaccineDataset(Dataset):
         ]
         for label_col in LABEL_COLS:
             if label_col not in self.df.columns:
-                self.df[label_col] = None
+                self.df[label_col] = np.nan
 
     def __len__(self):
         return len(self.df)

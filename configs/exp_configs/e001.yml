@@ -1,0 +1,3 @@
+description: "5 fold cv"
+runner: r001
+SINGLE_FOLD: false

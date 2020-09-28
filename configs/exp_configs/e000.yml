@@ -46,4 +46,5 @@ train:
     accum_mod: 1
     loss_weight_type: nothing
     pseudo: false
+    sn_filter: false
 predict:

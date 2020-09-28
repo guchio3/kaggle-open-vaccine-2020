@@ -87,6 +87,8 @@ class r001BaseRunner(object):
         trn_df = pd.read_json('./inputs/origin/train.json', lines=True)
         trn_df['reactivity_mean'] = trn_df['reactivity'].apply(
             lambda x: np.mean(x))
+        if self.cfg_train['sn_filter']:
+            trn_df = trn_df[trn_df.SN_filter == 1].reset_index(drop=True)
 
         # split data
         splitter = mySplitter(**self.cfg_split, logger=self.logger)
@@ -289,17 +291,20 @@ class r001BaseRunner(object):
 
         tst_sub_ids_list = []
         tst_sub_preds_list = []
-        for ckpt_filename in ckpt_filenames:
+        for ckpt_filename in tqdm(ckpt_filenames):
             checkpoint = torch.load(ckpt_filename)
-            model.load_state_dict(checkpoint['model_state_dict'])
+            if self.device == 'cuda':
+                model.module.load_state_dict(checkpoint['model_state_dict'])
+            else:
+                model.load_state_dict(checkpoint['model_state_dict'])
 
             # send to device
             model = model.to(self.device)
 
             pub_tst_ids, pub_tst_preds = self._test_loop(
-                model, pub_tst_loader, seq_len=68)
+                model, pub_tst_loader, seq_len=107)
             pri_tst_ids, pri_tst_preds = self._test_loop(
-                model, pri_tst_loader, seq_len=91)
+                model, pri_tst_loader, seq_len=130)
 
             pub_tst_sub_ids, pub_tst_sub_preds = self._explode_preds(
                 pub_tst_ids, pub_tst_preds)
@@ -315,13 +320,13 @@ class r001BaseRunner(object):
             tst_sub_preds_list.append(tst_sub_preds)
 
         res_tst_sub_ids = tst_sub_ids_list[0]
-        res_tst_sub_preds = np.mean(tst_sub_preds_list, axix=0)
+        res_tst_sub_preds = np.mean(tst_sub_preds_list, axis=0)
 
         sub_df = pd.DataFrame()
         sub_df['id_seqpos'] = res_tst_sub_ids
-        sub_df['reactivity'] = res_tst_sub_preds[0]
-        sub_df['deg_Mg_pH10'] = res_tst_sub_preds[1]
-        sub_df['deg_Mg_50C'] = res_tst_sub_preds[2]
+        sub_df['reactivity'] = res_tst_sub_preds[:, 0]
+        sub_df['deg_Mg_pH10'] = res_tst_sub_preds[:, 1]
+        sub_df['deg_Mg_50C'] = res_tst_sub_preds[:, 2]
         sub_df['deg_pH10'] = 0.
         sub_df['deg_50C'] = 0.
 
@@ -453,7 +458,7 @@ class r001BaseRunner(object):
                 logits = logits[:, :seq_len, :]
 
                 test_ids.append(id)
-                test_preds.append(logits)
+                test_preds.append(logits.cpu().numpy())
 
             test_ids = list(chain.from_iterable(test_ids))
             test_preds = list(chain.from_iterable(test_preds))
@@ -462,7 +467,7 @@ class r001BaseRunner(object):
 
     def _explode_preds(self, test_ids, test_preds):
         exploded_test_ids, exploded_test_preds = [], []
-        for test_id, test_pred in test_ids, test_preds:
+        for test_id, test_pred in zip(test_ids, test_preds):
             for i, test_pred_i in enumerate(test_pred):
                 exploded_test_ids.append(f'{test_id}_{i}')
                 exploded_test_preds.append(test_pred_i)

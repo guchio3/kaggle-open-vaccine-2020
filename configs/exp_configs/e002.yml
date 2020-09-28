@@ -1,0 +1,5 @@
+description: "use sn filter"
+runner: r001
+SINGLE_FOLD: false
+train:
+    sn_filter: false
