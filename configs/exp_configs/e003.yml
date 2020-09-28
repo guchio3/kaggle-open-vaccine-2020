@@ -1,0 +1,19 @@
+description: "e002 different settings"
+runner: r001
+SINGLE_FOLD: false
+train:
+loader:
+    trn_batch_size: 64
+    tst_batch_size: 64
+model:
+    model_type: guchio_gru_1
+    embed_dim: 96
+optimizer:
+    optim_type: adam
+    lr: 0.001
+scheduler:
+    scheduler_type: cosine
+    cosine_eta_min: 0.0003
+train:
+    max_epoch: 100
+    sn_filter: true

@@ -244,7 +244,7 @@ class r001BaseRunner(object):
             fold_time = int(time.time() - epoch_start_time) // 60
             line_message = f'{self.exp_id}: {self.description} \n' \
                 f'fini fold {fold_num} in {fold_time} min. \n' \
-                f'epoch best score: {epoch_best_score}'
+                f'epoch best score: {epoch_best_score:.5f}'
             self.logger.send_line_notification(line_message)
 
             if self.cfg_SINGLE_FOLD:
