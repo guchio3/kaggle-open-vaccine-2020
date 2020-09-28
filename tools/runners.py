@@ -63,7 +63,10 @@ class r001BaseRunner(object):
         self.cfg_optimizer = config['optimizer']
         self.cfg_scheduler = config['scheduler']
         self.cfg_train = config['train']
-        self.cfg_predict = config['predict']
+        if config['features'] is None:
+            self.cfg_features = []
+        else:
+            self.cfg_features = config['features']
 
         self.histories = {
             'train_loss': [],
@@ -145,7 +148,8 @@ class r001BaseRunner(object):
 
             # build model and related objects
             # these objects have state
-            model = self._get_model(**self.cfg_model)
+            model = self._get_model(**self.cfg_model,
+                                    num_features=len(self.cfg_features))
             module = model if self.device == 'cpu' else model.module
             optimizer = self._get_optimizer(model=model, **self.cfg_optimizer)
             scheduler = self._get_scheduler(optimizer=optimizer,
@@ -288,7 +292,8 @@ class r001BaseRunner(object):
                                             **self.cfg_loader)
         # build model and related objects
         # these objects have state
-        model = self._get_model(**self.cfg_model)
+        model = self._get_model(**self.cfg_model,
+                                num_features=len(self.cfg_features))
 
         ckpt_filenames = glob(f'./checkpoints/{self.exp_id}/best/*')
 
@@ -355,6 +360,9 @@ class r001BaseRunner(object):
             encoded_structure = batch['encoded_structure'].to(self.device)
             encoded_predicted_loop_type = batch['encoded_predicted_loop_type']\
                 .to(self.device)
+            features = []
+            for feature_name in self.cfg_features:
+                features.append(batch[feature_name].to(self.device))
             # reactivity_error = batch['reactivity_error'].to(self.device)
             # deg_error_Mg_pH10 = batch['deg_error_Mg_pH10'].to(self.device)
             # deg_error_pH10 = batch['deg_error_pH10'].to(self.device)
@@ -374,7 +382,8 @@ class r001BaseRunner(object):
 
             logits = model(encoded_sequence,
                            encoded_structure,
-                           encoded_predicted_loop_type)
+                           encoded_predicted_loop_type,
+                           features)
             logits = logits[:, :68, :]
 
             train_loss = fobj(logits, labels)
@@ -408,6 +417,9 @@ class r001BaseRunner(object):
                 encoded_structure = batch['encoded_structure'].to(self.device)
                 encoded_predicted_loop_type = \
                     batch['encoded_predicted_loop_type'].to(self.device)
+                features = []
+                for feature_name in self.cfg_features:
+                    features.append(batch[feature_name].to(self.device))
                 # reactivity_error = batch['reactivity_error'].to(self.device)
                 # deg_error_Mg_pH10 = batch['deg_error_Mg_pH10'].to(self.device)
                 # deg_error_pH10 = batch['deg_error_pH10'].to(self.device)
@@ -428,7 +440,8 @@ class r001BaseRunner(object):
 
                 logits = model(encoded_sequence,
                                encoded_structure,
-                               encoded_predicted_loop_type)
+                               encoded_predicted_loop_type,
+                               features)
                 logits = logits[:, :68, :]
 
                 valid_loss = fobj(logits, labels)
@@ -460,10 +473,14 @@ class r001BaseRunner(object):
                 encoded_structure = batch['encoded_structure'].to(self.device)
                 encoded_predicted_loop_type = \
                     batch['encoded_predicted_loop_type'].to(self.device)
+                features = []
+                for feature_name in self.cfg_features:
+                    features.append(batch[feature_name].to(self.device))
 
                 logits = model(encoded_sequence,
                                encoded_structure,
-                               encoded_predicted_loop_type)
+                               encoded_predicted_loop_type,
+                               features)
                 logits = logits[:, :seq_len, :]
 
                 test_ids.append(id)
@@ -490,13 +507,13 @@ class r001BaseRunner(object):
         return fobj
 
     def _get_model(self, model_type, num_layers, embed_dropout, dropout,
-                   num_embeddings, embed_dim, out_dim):
+                   num_embeddings, embed_dim, out_dim, num_features):
         if model_type == 'guchio_gru_1':
             model = guchioGRU1(
                 num_layers=num_layers,
                 embed_dropout=embed_dropout, dropout=dropout,
                 num_embeddings=num_embeddings, embed_dim=embed_dim,
-                out_dim=out_dim
+                out_dim=out_dim, num_features=num_features
             )
         else:
             raise Exception(f'invalid model_type: {model_type}')

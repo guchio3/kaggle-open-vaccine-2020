@@ -49,4 +49,4 @@ train:
     pseudo: false
     sn_filter: false
     signal_to_noise_thresh: -100000
-predict:
+features:

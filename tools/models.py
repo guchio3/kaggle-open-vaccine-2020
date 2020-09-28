@@ -42,10 +42,10 @@ class guchioGRU1(nn.Module):
     def __init__(self,  # pred_len
                  num_layers, embed_dropout, dropout,
                  num_embeddings, embed_dim,
-                 out_dim):
+                 out_dim, num_features):
         super(guchioGRU1, self).__init__()
         assert embed_dim % 2 == 0
-        hidden_dim = embed_dim * 3
+        hidden_dim = embed_dim * 3 + num_features
         # self.pred_len = pred_len
         self.embedding = nn.Embedding(
             num_embeddings=num_embeddings,
@@ -64,7 +64,8 @@ class guchioGRU1(nn.Module):
     def forward(self,
                 encoded_sequence,
                 encoded_structure,
-                encoded_predicted_loop_type):
+                encoded_predicted_loop_type,
+                features):
         embed_sequence = self.embedding(encoded_sequence)
         embed_structure = self.embedding(encoded_structure)
         embed_predicted_loop_type = self.embedding(encoded_predicted_loop_type)
@@ -75,8 +76,10 @@ class guchioGRU1(nn.Module):
         #     dim=1)
         # embed = self.embedding(seqs)
         # output = embed
+        features = [feature.reshape(feature.shape[0], feature.shape[1], 1)
+                    for feature in features]
         embed = torch.cat([embed_sequence, embed_structure,
-                           embed_predicted_loop_type], dim=-1)
+                           embed_predicted_loop_type] + features, dim=-1)
         embed = self.embed_dropout(embed)
         output, hidden = self.gru(embed)
         out = self.linear(output)

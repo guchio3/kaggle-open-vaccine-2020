@@ -1,0 +1,25 @@
+description: "e012 embed dropout w/ signal_to_noise_thresh"
+runner: r001
+SINGLE_FOLD: false
+train:
+loader:
+    trn_batch_size: 64
+    tst_batch_size: 64
+model:
+    model_type: guchio_gru_1
+    embed_dim: 96
+    embed_dropout: 0.2
+optimizer:
+    optim_type: rmsprop
+    lr: 0.0001
+scheduler:
+    scheduler_type: cosine
+    cosine_eta_min: 0.00003
+train:
+    max_epoch: 100
+    sn_filter: false
+    signal_to_noise_thresh: 1
+features:
+    - bpp_max
+    - bpp_sum
+    - bpp_non_zero_ratio
