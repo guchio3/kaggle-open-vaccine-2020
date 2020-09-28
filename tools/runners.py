@@ -291,7 +291,9 @@ class r001BaseRunner(object):
 
         tst_sub_ids_list = []
         tst_sub_preds_list = []
+        best_val_scores = []
         for ckpt_filename in tqdm(ckpt_filenames):
+            best_val_scores.append(float(ckpt_filename.split('/')[-1].split('_')[4]))
             checkpoint = torch.load(ckpt_filename)
             if self.device == 'cuda':
                 model.module.load_state_dict(checkpoint['model_state_dict'])
@@ -330,7 +332,10 @@ class r001BaseRunner(object):
         sub_df['deg_pH10'] = 0.
         sub_df['deg_50C'] = 0.
 
-        sub_df.to_csv(f'./submissions/{self.exp_id}_sub.csv', index=False)
+        save_filename = f'./submissions/{self.exp_id}' \
+                        f'_{float(np.mean(best_val_scores)):.5f}' \
+                        f'+-{float(np.std(best_val_scores)):.5f}_sub.csv'
+        sub_df.to_csv(save_filename, index=False)
 
     def _train_loop(self, model, optimizer, fobj,
                     loader, warmup_batch, ema, accum_mod):
