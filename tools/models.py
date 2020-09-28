@@ -40,7 +40,7 @@ class EMA(object):
 
 class guchioGRU1(nn.Module):
     def __init__(self,  # pred_len
-                 num_layers, dropout,
+                 num_layers, embed_dropout, dropout,
                  num_embeddings, embed_dim,
                  out_dim):
         super(guchioGRU1, self).__init__()
@@ -50,6 +50,7 @@ class guchioGRU1(nn.Module):
         self.embedding = nn.Embedding(
             num_embeddings=num_embeddings,
             embedding_dim=embed_dim)
+        self.embed_dropout = nn.Dropout(p=embed_dropout)
         self.gru = nn.GRU(
             input_size=hidden_dim,
             hidden_size=hidden_dim,
@@ -76,6 +77,7 @@ class guchioGRU1(nn.Module):
         # output = embed
         embed = torch.cat([embed_sequence, embed_structure,
                            embed_predicted_loop_type], dim=-1)
+        embed = self.embed_dropout(embed)
         output, hidden = self.gru(embed)
         out = self.linear(output)
         # truncated = output[:, : self.pred_len, :]

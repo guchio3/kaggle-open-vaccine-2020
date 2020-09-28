@@ -89,6 +89,9 @@ class r001BaseRunner(object):
             lambda x: np.mean(x))
         if self.cfg_train['sn_filter']:
             trn_df = trn_df[trn_df.SN_filter == 1].reset_index(drop=True)
+        trn_df = trn_df[trn_df.signal_to_noise >=
+                        self.cfg_train['signal_to_noise_thresh']]\
+            .reset_index(drop=True)
 
         # split data
         splitter = mySplitter(**self.cfg_split, logger=self.logger)
@@ -293,7 +296,8 @@ class r001BaseRunner(object):
         tst_sub_preds_list = []
         best_val_scores = []
         for ckpt_filename in tqdm(ckpt_filenames):
-            best_val_scores.append(float(ckpt_filename.split('/')[-1].split('_')[4]))
+            best_val_scores.append(
+                float(ckpt_filename.split('/')[-1].split('_')[4]))
             checkpoint = torch.load(ckpt_filename)
             if self.device == 'cuda':
                 model.module.load_state_dict(checkpoint['model_state_dict'])
@@ -485,11 +489,12 @@ class r001BaseRunner(object):
             raise Exception(f'invalid fobj_type: {fobj_type}')
         return fobj
 
-    def _get_model(self, model_type, num_layers, dropout,
+    def _get_model(self, model_type, num_layers, embed_dropout, dropout,
                    num_embeddings, embed_dim, out_dim):
         if model_type == 'guchio_gru_1':
             model = guchioGRU1(
-                num_layers=num_layers, dropout=dropout,
+                num_layers=num_layers,
+                embed_dropout=embed_dropout, dropout=dropout,
                 num_embeddings=num_embeddings, embed_dim=embed_dim,
                 out_dim=out_dim
             )

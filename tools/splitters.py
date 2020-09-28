@@ -32,14 +32,6 @@ class mySplitter:
             ).split(x, y)
         elif self.split_type == 'gkf':
             fold = gkf(self.split_num).split(x, y, group)
-        elif self.split_type == 'abhishek5':
-            fold = []
-            fold_df = pd.read_csv(self.abhishek5)
-            for i in range(5):
-                fold.append((
-                            fold_df.query(f'kfold != {i}').index.tolist(),
-                            fold_df.query(f'kfold == {i}').index.tolist(),
-                            ))
         else:
             raise NotImplementedError(f'split_type: {self.split_type}')
         return fold
