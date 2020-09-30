@@ -24,6 +24,8 @@ model:
     num_embeddings: 14
     embed_dim: 64
     out_dim: 3
+    num_trans_layers: 0
+    num_trans_attention_heads: 0
 fobj:
     fobj_type: mcrmse
 optimizer:

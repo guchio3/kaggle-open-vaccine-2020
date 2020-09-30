@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from transformers import BertLayer, BertConfig
+
 
 class EMA(object):
     def __init__(self, model, mu, level='batch', n=1):
@@ -42,7 +44,8 @@ class guchioGRU1(nn.Module):
     def __init__(self,  # pred_len
                  num_layers, embed_dropout, dropout,
                  num_embeddings, embed_dim,
-                 out_dim, num_features):
+                 out_dim, num_features,
+                 num_trans_layers, num_trans_attention_heads):
         super(guchioGRU1, self).__init__()
         assert embed_dim % 2 == 0
         hidden_dim = embed_dim * 3 + num_features
@@ -59,6 +62,14 @@ class guchioGRU1(nn.Module):
             bidirectional=True,
             batch_first=True,
         )
+        bert_layers = []
+        self.bert_config = BertConfig()
+        self.bert_config.hidden_size = hidden_dim * 2
+        self.bert_config.num_attention_heads = num_trans_attention_heads
+        for _ in range(num_trans_layers):
+            bert_layer = BertLayer(self.bert_config)
+            bert_layers.append(bert_layer)
+        self.bert_layers = nn.Sequential(*bert_layers)
         self.linear = nn.Linear(hidden_dim * 2, out_dim)
 
     def forward(self,
@@ -82,6 +93,8 @@ class guchioGRU1(nn.Module):
                            embed_predicted_loop_type] + features, dim=-1)
         embed = self.embed_dropout(embed)
         output, hidden = self.gru(embed)
+        for bert_layer in self.bert_layers:
+            output = bert_layer(output)[0]
         out = self.linear(output)
         # truncated = output[:, : self.pred_len, :]
         # out = self.linear(truncated)
