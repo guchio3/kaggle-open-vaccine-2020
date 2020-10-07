@@ -19,6 +19,8 @@ model:
     # seq_len: 107
     # pred_len: 68
     num_layers: 3
+    num_lstm_layers: 0
+    bilstm: false
     embed_dropout: 0.
     dropout: 0.5
     num_embeddings: 14

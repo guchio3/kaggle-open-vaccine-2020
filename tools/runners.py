@@ -506,12 +506,15 @@ class r001BaseRunner(object):
             raise Exception(f'invalid fobj_type: {fobj_type}')
         return fobj
 
-    def _get_model(self, model_type, num_layers, embed_dropout, dropout,
-                   num_embeddings, embed_dim, out_dim, num_features,
+    def _get_model(self, model_type, num_layers, num_lstm_layers, bilstm,
+                   embed_dropout, dropout, num_embeddings,
+                   embed_dim, out_dim, num_features,
                    num_trans_layers, num_trans_attention_heads):
         if model_type == 'guchio_gru_1':
             model = guchioGRU1(
                 num_layers=num_layers,
+                num_lstm_layers=num_lstm_layers,
+                bilstm=bilstm,
                 embed_dropout=embed_dropout, dropout=dropout,
                 num_embeddings=num_embeddings, embed_dim=embed_dim,
                 out_dim=out_dim, num_features=num_features,

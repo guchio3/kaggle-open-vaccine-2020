@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-
-from transformers import BertLayer, BertConfig
+from transformers import BertConfig, BertLayer
 
 
 class EMA(object):
@@ -42,7 +41,8 @@ class EMA(object):
 
 class guchioGRU1(nn.Module):
     def __init__(self,  # pred_len
-                 num_layers, embed_dropout, dropout,
+                 num_layers, num_lstm_layers, bilstm,
+                 embed_dropout, dropout,
                  num_embeddings, embed_dim,
                  out_dim, num_features,
                  num_trans_layers, num_trans_attention_heads):
@@ -62,6 +62,43 @@ class guchioGRU1(nn.Module):
             bidirectional=True,
             batch_first=True,
         )
+        if num_lstm_layers > 0:
+            if bilstm:
+                self.lstm = nn.LSTM(
+                    input_size=hidden_dim*2,
+                    hidden_size=hidden_dim,
+                    num_layers=num_lstm_layers,
+                    dropout=dropout,
+                    bidirectional=True,
+                    batch_first=True,
+                )
+                self.flstm = None
+                self.blstm = None
+            else:
+                self.lstm = None
+                self.flstm = nn.LSTM(
+                    input_size=hidden_dim,
+                    hidden_size=hidden_dim,
+                    num_layers=num_lstm_layers,
+                    dropout=dropout,
+                    bidirectional=False,
+                    batch_first=True,
+                )
+                self.blstm = nn.LSTM(
+                    input_size=hidden_dim,
+                    hidden_size=hidden_dim,
+                    num_layers=num_lstm_layers,
+                    dropout=dropout,
+                    bidirectional=False,
+                    batch_first=True,
+                )
+        else:
+            self.lstm = None
+            self.flstm = None
+            self.blstm = None
+        # self.position_embedding = nn.Embedding(
+        #     num_embeddings=,
+        #     embedding_dim=hidden_dim*2)
         bert_layers = []
         self.bert_config = BertConfig()
         self.bert_config.hidden_size = hidden_dim * 2
@@ -93,6 +130,17 @@ class guchioGRU1(nn.Module):
                            embed_predicted_loop_type] + features, dim=-1)
         embed = self.embed_dropout(embed)
         output, hidden = self.gru(embed)
+        if self.lstm:
+            output, hidden = self.lstm(output)
+        elif self.flstm:
+            foutput = output[:, :, :output.shape[-1] // 2]
+            boutput = torch.flip(output[:, :, output.shape[-1] // 2:], [1])
+            # if self.fb_reverse:
+            #     temp = foutput
+            #     foutput = boutput
+            foutput = self.flstm(foutput)[0]
+            boutput = torch.flip(self.blstm(boutput)[0], [1])
+            output = torch.cat([foutput, boutput], dim=-1)
         for bert_layer in self.bert_layers:
             output = bert_layer(output)[0]
         out = self.linear(output)
